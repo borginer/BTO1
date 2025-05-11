@@ -50,13 +50,19 @@ VOID Trace(TRACE trace, VOID *v) {
 
         INS tail = BBL_InsTail(bbl);
 
-        if (INS_IsBranch(tail) && INS_HasFallThrough(tail)) {
+        if (INS_IsBranch(tail)) {
             bblEntries[bblAddr].isConditionalJump = true;
+
             INS_InsertCall(tail, IPOINT_TAKEN_BRANCH, (AFUNPTR)count_taken, IARG_ADDRINT, bblAddr, IARG_END);
-            INS_InsertCall(tail, IPOINT_AFTER, (AFUNPTR)count_fallthrough, IARG_ADDRINT, bblAddr, IARG_END);
-        } else if (INS_IsBranch(tail) && INS_IsIndirectControlFlow(tail)) {
-            INS_InsertCall(tail, IPOINT_BEFORE, (AFUNPTR)count_branch_indirect, IARG_ADDRINT, bblAddr,
-                           IARG_BRANCH_TARGET_ADDR, IARG_BRANCH_TAKEN, IARG_END);
+
+            if (INS_HasFallThrough(tail)) {
+                INS_InsertCall(tail, IPOINT_AFTER, (AFUNPTR)count_fallthrough, IARG_ADDRINT, bblAddr, IARG_END);
+            }
+
+            if (INS_IsIndirectControlFlow(tail)) {
+                INS_InsertCall(tail, IPOINT_BEFORE, (AFUNPTR)count_branch_indirect, IARG_ADDRINT, bblAddr,
+                    IARG_BRANCH_TARGET_ADDR, IARG_BRANCH_TAKEN, IARG_END);
+            }
         }
     }
 }
@@ -64,40 +70,45 @@ VOID Trace(TRACE trace, VOID *v) {
 VOID Fini(INT32 code, VOID *v) {
     std::ofstream out("edge-profile.csv");
 
+    // turn map to sorted vector
     vector<pair<ADDRINT, BBLEntry>> sorted;
     for (auto &entry : bblEntries) {
         sorted.push_back(entry);
     }
 
-    std::sort(sorted.begin(), sorted.end(),
-              [](const pair<ADDRINT, BBLEntry> &a, const pair<ADDRINT, BBLEntry> &b) {
-                  return a.second.execCount > b.second.execCount;
-              });
+    std::sort(sorted.begin(), sorted.end(), 
+        [](const pair<ADDRINT, BBLEntry> &a, const pair<ADDRINT, BBLEntry> &b) {
+            return a.second.execCount > b.second.execCount;
+        }
+    );
 
     for (const auto &entry : sorted) {
         const ADDRINT addr = entry.first;
         const BBLEntry &bbl = entry.second;
 
-        out << std::hex << addr << ", " << std::dec << bbl.execCount << ", "
-            << bbl.takenCount << ", ";
+        if (bbl.execCount == 0) continue;
 
-        if (bbl.isConditionalJump) {
-            out << bbl.fallthroughCount;
-        } else {
-            out << "0";
+        out << std::hex << addr << ", " << std::dec << bbl.execCount << ", " 
+            << bbl.takenCount << ", " << bbl.fallthroughCount;
+
+        if (!bbl.isConditionalJump) {
+            out << endl;
+            continue;
         }
 
-        // Top 10 indirect targets
+        // sort by most called indirect targets
         vector<pair<ADDRINT, UINT64>> targets(bbl.indirectTargets.begin(), bbl.indirectTargets.end());
         std::sort(targets.begin(), targets.end(),
-                  [](const pair<ADDRINT, UINT64> &a, const pair<ADDRINT, UINT64> &b) {
-                      return a.second > b.second;
-                  });
-
+            [](const pair<ADDRINT, UINT64> &a, const pair<ADDRINT, UINT64> &b) {
+                return a.second > b.second;
+            }
+        );
+        
+        // print top 10 indirect targets
         int count = 0;
         for (auto &t : targets) {
             if (count++ >= 10) break;
-            out << ", <" << std::hex << t.first << ", " << std::dec << t.second << ">";
+            out << ", " << std::hex << t.first << ":" << std::dec << t.second;
         }
 
         out << endl;

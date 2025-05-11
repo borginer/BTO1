@@ -10,8 +10,9 @@
 #include <iostream>
 #include <iomanip>
 #include <fstream>
-#include <map>
+// #include <map>
 #include <unistd.h>
+#include <ostream>
 #include "pin.H"
 using std::cerr;
 using std::endl;
@@ -146,6 +147,7 @@ int main(int argc, char* argv[])
 
     INS_AddInstrumentFunction(Instruction, 0);
     PIN_AddFiniFunction(Fini, 0);
+    
 
     // Never returns
 

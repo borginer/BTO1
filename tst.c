@@ -23,7 +23,7 @@ void gal()
 
 }
 
-void main()
+int main()
 {
 
  int i,j;

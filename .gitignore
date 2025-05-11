@@ -1,0 +1,7 @@
+.ccls-cache
+obj-intel64
+test
+compile_commands.json
+*.csv
+.vscode
+.cache
